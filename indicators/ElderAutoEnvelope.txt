@@ -1,0 +1,93 @@
+//@Name:Elder's AutoEnvelope
+//@Description:From Alexander Elder's book "Sell & Sell Short"
+
+//Envelope channels are set parallel to a slow moving average. 
+//The two channel lines should contain approximately 90-95% of all prices 
+//for the past two or three months between them with only the extremes 
+//protruding outside. Envelope channels provide attractive profit targets 
+//- sell longs near the upper channel line and cover shorts near the lower 
+//channel line. The AutoEnvelope is a custom indicator that automatically 
+//sizes channels by calculating a standard deviation for the last 100 bars - 
+//the 'lookback' period. It is designed to change value at most once a week, 
+//making it suitable even for intra-day data.
+
+// Indicator built by ShareScope Support and Jurgen Whitehouse
+// Origninal file name ElderAutoEnvelope.ss
+ 
+
+var period = 22; //MA period
+int fLookback = 100; //The lookback period
+var factor= 2; //number of standard deviations
+
+//dialog box code
+function init(status)
+{
+	if (status==Loading || status==Editing)
+	{
+		period = storage.getAt(0);
+		fLookback = storage.getAt(1);
+		factor = storage.getAt(2);
+	}
+	if (status==Adding || status==Editing)
+	{
+		var dlg = new Dialog((status==Adding?"Add":"Edit")+" indicator",165,60)
+		dlg.addOkButton();
+		dlg.addCancelButton();
+		dlg.addIntEdit("INT1",8,-1,-1,-1,"","EMA period",period,2,1000);
+		dlg.addIntEdit("INT2",8,-1,-1,-1,"","Lookback period",fLookback,2,1000);
+		dlg.addIntEdit("INT3",8,-1,-1,-1,"","Std Devs",factor,2,1000);
+		if (dlg.show()==Dialog.Cancel)
+			return false;
+		
+		period = dlg.getValue("INT1");
+		fLookback = dlg.getValue("INT2");
+		factor = dlg.getValue("INT3");
+		storage.setAt(0, period);
+		storage.setAt(1, fLookback);
+		storage.setAt(2, factor);
+	}
+
+	setRange(Range.Parent); 
+}
+
+function getGraph(share, data)
+	{
+	var ma1 = new MA(period, MA.Exponential); //Setup of EMA, from which the envelopes will be set.
+	var w = new Array();
+	var envelope //envelope size
+	var x //standard deviation intermidiate value
+
+	var av1 = new Array();
+
+	var upperEnvelope  = new Array(); //the upper envelope array
+	var lowerEnvelope  = new Array(); //the lower envelope array
+
+	for (var i=0;i<data.length;i++)
+		{					
+		av1[i] = ma1.getNext(data[i].close); //Close price MA
+		//calculate the bar's range of high-low
+		w[i] = Math.abs(data[i].high-data[i].low);
+
+		x = 0;
+
+		if ( i < fLookback) continue; //skip to next i if i is smaller than fLookback
+
+		//Standard deviation calculations
+		for (var q=i-fLookback+1; q<i+1; q++)
+			x += Math.pow(w[q],2) - (w[q] * (w[q]/fLookback));
+		envelope = (Math.sqrt(x/(fLookback-1))) * factor;
+
+
+		//calculate the envelope size and envelope values	
+		m_bandOffset[i] = envelope/2[
+//		upperEnvelope[i] = av1[i] + (envelope / 2);
+//		lowerEnvelope[i] = av1[i] - (envelope / 2);		
+		}
+	
+	//if the length of the share's history isn't larger than the
+	//lookback period, the envelopes aren't returned.
+	if (data.length>fLookback)
+		return [av1,upperEnvelope,lowerEnvelope];
+	else
+		return av1;
+	}

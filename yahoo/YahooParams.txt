@@ -1,0 +1,118 @@
+
+	private static String[][] _parameters =
+		{
+			{ "a",  "Ask" },
+			{ "a2", "Avg Daily Volume" },
+			{ "a5", "Ask Size" },
+			{ "b",  "Bid" },
+		//	{ "b2", "Ask (RT)" },
+		//	{ "b3", "Bid (RT)" },
+			{ "b4", "Book Value" },
+			{ "b6", "Bid Size" },
+			{ "c",  "% Change" },
+			{ "c1", "Change" },
+		//	{ "c3", "Commission" },
+		//	{ "c6", "Change (RT)" },
+		//	{ "c8", "After Hour Change (RT)" },
+			{ "d",  "Dividend/Share" },
+		//	{ "d1", "Last Trade Date" },
+		//	{ "d2", "Trade Date" },
+			{ "e",  "EPS" },
+		//	{ "e1", "Error Indication" },
+			{ "e7", "EPS Est Current Year" },
+			{ "e8", "EPS Est Next Year" },
+			{ "e9", "EPS Est Next Quarter" },
+			{ "f6", "Float Shares" },
+			{ "g",  "Day's Low" },
+			{ "h",  "Day's High" },
+			{ "j",  "52-Week Low" },
+			{ "k",  "52-Week High" },
+		//	{ "g1", "Holding Gain %" },
+		//	{ "g3", "Annualized Gain" },
+		//	{ "g4", "Holding Gain" },
+		//	{ "g5", "Holding Gain % (RT)" },
+		//	{ "g6", "Holding Gain (RT)" },
+			{ "i",  "More Info" },
+		//	{ "i5", "Order Book (RT)" },
+			{ "j1", "Market Cap" },
+		//	{ "j3", "Market Cap (RT)" },
+			{ "j4", "EBITDA" },
+			{ "j5", "Change from 52-W Low" },
+			{ "j6", "% Change from 52-W Low" },
+		//	{ "k1", "Last Trade with Time (RT)" },
+		//	{ "k2", "Change % (RT)" },
+			{ "k3", "Last Trade Size" },
+			{ "k4", "Change from 52-W High" },
+			{ "k5", "% Change from 52-W" },
+			{ "l",  "Last Trade with Time" },
+			{ "l1", "Last Trade (Price Only)" },
+		//	{ "l2", "High Limit" },
+		//	{ "l3", "Low Limit" },
+			{ "m",  "Day's Range" },
+		//	{ "m2", "Day's Range (RT)" },
+			{ "m3", "50-Day MA" },
+			{ "m4", "200-Day MA" },
+			{ "m5", "Change from 200-D MA" },
+			{ "m6", "% Change from 200-D MA" },
+			{ "m7", "Change from 50-D MA" },
+			{ "m8", "% Change from 50-D MA" },
+			{ "m8", "% Change from 50-D MA" },
+			{ "n",  "Name" },
+			{ "n4", "Notes" },
+			{ "o",  "Open" },
+			{ "p",  "Previous Close" },
+			{ "p1", "Price Paid" },
+			{ "p2", "Change in %" },
+			{ "p5", "Price/Sales" },
+			{ "p6", "Price/Book" },
+			{ "q",  "Ex-Dividend Date" },
+			{ "r",  "P/E Ratio" },
+			{ "r1", "Dividend Pay Date" },
+		//	{ "r2", "P/E Ratio (RT)" },
+			{ "r5", "PEG Ratio" },
+			{ "r6", "Price/EPS Est Current Year" },
+			{ "r7", "Price/EPS Est Next Year" },
+			{ "s",  "Symbol" },
+		//	{ "s1", "Shares Owned" },
+			{ "s7", "Short Ratio" },
+			{ "t1", "Last Trade Time" },
+			{ "t6", "Trade Links" },
+			{ "t7", "Ticker Trend" },
+			{ "t8", "1 Year Target" },
+			{ "v",  "Volume" },
+			{ "v1", "Holding Value" },
+		//	{ "v7", "Holding Value (RT)" },
+			{ "w",  "52-W Range" },
+			{ "w1", "Day's Value Change" },
+		//	{ "w4", "Day's Value Change(RT)" },
+			{ "x",  "Stock Exchange" },
+			{ "y",  "Dividend Yield" }
+		};
+
+For processing multiple symbols in a single request do something like:
+
+	private static String SPACE_CHAR = "%20";
+	public String getSymbolList()
+		{
+		final StringBuilder list = new StringBuilder();
+		int size = m_symbols.size();
+		for ( int i = 0; ; )
+			{
+			list.append((String)m_symbols.get(i));
+			if ( ++i < size )
+				list.append(SPACE_CHAR);
+			else
+				break;
+			}
+		return list.toString();
+		}
+
+	public String getParameters()
+		{
+		return "nl1vkjdy";
+		}
+
+	public String getURL()
+		{
+		return URL_PREFIX + getSymbolList() + CONNECTOR + getParameters();
+		}

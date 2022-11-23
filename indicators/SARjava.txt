@@ -1,0 +1,245 @@
+/*
+* TA_SAR - Parabolic SAR
+*
+* Input  = High, Low
+* Output = double
+*/
+	// Optional Parameters
+	static double optInAcceleration = 0.02; // initial Acceleration Factor
+	static double optInMaximum = 0.20;  // maimum Acceleration Factor
+
+	public RetCode sar( int    startIdx,
+										int    endIdx,
+										float        inHigh[],
+										float        inLow[],
+										double        optInAcceleration, /* From 0 to TA_REAL_MAX */
+										double        optInMaximum, /* From 0 to TA_REAL_MAX */
+										MInteger     outBegIdx,
+										MInteger     outNBElement,
+										double        outReal[] )
+		{
+		/* insert local variable here */
+		ENUM_DECLARATION(RetCode) retCode;
+
+		int isLong; /* > 0 indicates long. == 0 indicates short */
+		int todayIdx, outIdx;
+
+		VALUE_HANDLE_INT(tempInt);
+
+		double newHigh, newLow, prevHigh, prevLow;
+		double af, ep, sar;
+		ARRAY_LOCAL(ep_temp,1);
+
+		/* Validate the requested output range. */
+		if( startIdx < 0 )
+			return ENUM_VALUE(RetCode,TA_OUT_OF_RANGE_START_INDEX,OutOfRangeStartIndex);
+		if( (endIdx < 0) || (endIdx < startIdx))
+			return ENUM_VALUE(RetCode,TA_OUT_OF_RANGE_END_INDEX,OutOfRangeEndIndex);
+
+		/* Verify required price component. */
+		if(!inHigh||!inLow)
+			return ENUM_VALUE(RetCode,TA_BAD_PARAM,BadParam);
+
+		/* Insert TA function code here. */
+
+	/* Identify the minimum number of price bar needed
+	* to calculate at least one output.
+	*
+	* Move up the start index if there is not
+	* enough initial data.
+	*/
+  287    if( startIdx < 1 )
+  288       startIdx = 1;
+  289 
+  290    /* Make sure there is still something to evaluate. */
+  291    if( startIdx > endIdx )
+  292    {
+  293       VALUE_HANDLE_DEREF_TO_ZERO(outBegIdx);
+  294       VALUE_HANDLE_DEREF_TO_ZERO(outNBElement);
+  295       return ENUM_VALUE(RetCode,TA_SUCCESS,Success);
+  296    }
+  297 
+  298    /* Make sure the acceleration and maximum are coherent.
+  299     * If not, correct the acceleration.
+  300     */
+  301    af = optInAcceleration;
+  302    if( af > optInMaximum )
+  303       af = optInAcceleration = optInMaximum;
+  304 
+  305    /* Identify if the initial direction is long or short.
+  306     * (ep is just used as a temp buffer here, the name
+  307     *  of the parameter is not significant).
+  308     */
+  309    retCode = FUNCTION_CALL(MINUS_DM)( startIdx, startIdx, inHigh, inLow, 1,
+  310                                       VALUE_HANDLE_OUT(tempInt), VALUE_HANDLE_OUT(tempInt),
+  311 								      ep_temp );
+  312    if( ep_temp[0] > 0 )
+  313       isLong = 0;
+  314    else
+  315       isLong = 1;
+  316 
+  317    if( retCode != ENUM_VALUE(RetCode,TA_SUCCESS,Success) )
+  318    {
+  319       VALUE_HANDLE_DEREF_TO_ZERO(outBegIdx);
+  320       VALUE_HANDLE_DEREF_TO_ZERO(outNBElement);
+  321       return retCode;
+  322    }
+  323 
+  324    VALUE_HANDLE_DEREF(outBegIdx) = startIdx;
+  325    outIdx = 0;
+  326 
+  327    /* Write the first SAR. */
+  328    todayIdx = startIdx;
+  329 
+  330    newHigh = inHigh[todayIdx-1];
+  331    newLow  = inLow[todayIdx-1];
+  332 
+  336    if( isLong == 1 )
+  337    {
+  338       ep  = inHigh[todayIdx];
+  339       sar = newLow;
+  340    }
+  341    else
+  342    {
+  343       ep  = inLow[todayIdx];
+  344       sar = newHigh;
+  345    }
+  346 
+  349    /* Cheat on the newLow and newHigh for the
+  350     * first iteration.
+  351     */
+  352    newLow  = inLow[todayIdx];
+  353    newHigh = inHigh[todayIdx];
+  354 
+		while( todayIdx <= endIdx )
+			{
+			prevLow  = newLow;
+			prevHigh = newHigh;
+			newLow  = inLow[todayIdx];
+			newHigh = inHigh[todayIdx];
+			todayIdx++;
+
+			if( isLong == 1 )
+				{
+				/* Switch to short if the low penetrates the SAR value. */
+				if( newLow <= sar )
+					{
+					/* Switch and Overide the SAR with the ep */
+					isLong = 0;
+					sar = ep;
+
+					/* Make sure the overide SAR is within
+					* yesterday's and today's range.
+					*/
+					if( sar < prevHigh )
+						sar = prevHigh;
+					if( sar < newHigh )
+						sar = newHigh;
+					/* Output the overide SAR  */
+					outReal[outIdx++] = sar;
+
+					/* Adjust af and ep */
+					af = optInAcceleration;
+					ep = newLow;
+
+					/* Calculate the new SAR */
+					sar = sar + af * (ep - sar);
+
+					/* Make sure the new SAR is within
+					* yesterday's and today's range.
+					*/
+					if ( sar < prevHigh )
+						sar = prevHigh;
+					if ( sar < newHigh )
+						sar = newHigh;
+					}
+				else // No reversal
+					{
+					// Output the SAR (was calculated in the previous iteration)
+					outReal[outIdx++] = sar;
+
+					/* Adjust af and ep. */
+					if( newHigh > ep )
+						{
+						ep = newHigh;
+						af += optInAcceleration;
+						if( af > optInMaximum )
+							af = optInMaximum;
+						}
+
+					/* Calculate the new SAR */
+					sar = sar + af * (ep - sar);
+
+					/* Make sure the new SAR is within
+					* yesterday's and today's range.
+					*/
+					if ( sar > prevLow )
+						sar = prevLow;
+					if ( sar > newLow )
+						sar = newLow;
+					}
+				}
+			else // short: isLong == false
+				{
+				/* Switch to long if the high penetrates the SAR value. */
+				if( newHigh >= sar )
+					{
+					/* Switch and Overide the SAR with the ep */
+					isLong = 1;
+					sar = ep;
+
+					/* Make sure the overide SAR is within
+					* yesterday's and today's range.
+					*/
+					if ( sar > prevLow )
+						sar = prevLow;
+					if ( sar > newLow )
+						sar = newLow;
+
+					/* Output the overide SAR  */
+					outReal[outIdx++] = sar;
+
+					/* Adjust af and ep */
+					af = optInAcceleration;
+					ep = newHigh;
+
+					/* Calculate the new SAR */
+					sar = sar + af * (ep - sar);
+
+					/* Make sure the new SAR is within
+					* yesterday's and today's range.
+					*/
+					if ( sar > prevLow )
+						sar = prevLow;
+					if ( sar > newLow )
+						sar = newLow;
+					}
+				else // NO Reversal
+					{
+					// Output the SAR (was calculated in the previous iteration)
+					outReal[outIdx++] = sar;
+
+					/* Adjust af and ep. */
+					if ( newLow < ep )
+						{
+						ep = newLow;
+						af += optInAcceleration;
+						if ( af > optInMaximum )
+							af = optInMaximum;
+						}
+					/* Calculate the new SAR */
+					sar = sar + af * (ep - sar);
+
+					/* Make sure the new SAR is within
+					* yesterday's and today's range.
+					*/
+					if ( sar < prevHigh )
+						sar = prevHigh;
+					if ( sar < newHigh )
+						sar = newHigh;
+					}
+				}
+			}
+		VALUE_HANDLE_DEREF(outNBElement) = outIdx;
+		return ENUM_VALUE(RetCode,TA_SUCCESS,Success);
+		}

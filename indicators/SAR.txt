@@ -1,0 +1,402 @@
+/* TA-LIB Copyright (c) 1999-2008, Mario Fortier
+ * All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or
+* without modification, are permitted provided that the following
+* conditions are met:
+*
+* - Redistributions of source code must retain the above copyright
+*   notice, this list of conditions and the following disclaimer.
+*
+* - Redistributions in binary form must reproduce the above copyright
+*   notice, this list of conditions and the following disclaimer in
+*   the documentation and/or other materials provided with the
+*   distribution.
+*
+* - Neither name of author nor the names of its contributors
+*   may be used to endorse or promote products derived from this
+*   software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+* ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+* REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+* OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+* WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+* OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+* EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+ 
+/* List of contributors:
+*
+*  Initial  Name/description
+*  -------------------------------------------------------------------
+*  MF       Mario Fortier
+*  CF       Christo Fogelberg
+*
+* Change history:
+*
+*  MMDDYY BY     Description
+*  -------------------------------------------------------------------
+*  010802 MF     Template creation.
+*  052603 MF     Adapt code to compile with .NET Managed C++
+*  122104 MF,CF  Fix#1089506 for out-of-bound access to ep_temp.
+*/
+
+/* SAR_ROUNDING is just for test purpose when cross-referencing that
+* function with example from Wilder's book. Wilder is using two
+* decimal rounding for simplification. TA-Lib does not round.
+*/
+/* #define SAR_ROUNDING(x) x=round_pos_2(x) */
+#define SAR_ROUNDING(x)
+ 
+   93 /* Generated */ public int sarLookback( double        optInAcceleration, /* From 0 to TA_REAL_MAX */
+   94 /* Generated */                       double        optInMaximum )  /* From 0 to TA_REAL_MAX */
+  102 {
+  103    /* insert local variable here */
+  104 
+  105 /**** START GENCODE SECTION 2 - DO NOT DELETE THIS LINE ****/
+  106 /* Generated */ #ifndef TA_FUNC_NO_RANGE_CHECK
+  107 /* Generated */    if( optInAcceleration == TA_REAL_DEFAULT )
+  108 /* Generated */       optInAcceleration = 2.000000e-2;
+  109 /* Generated */    else if( (optInAcceleration < 0.000000e+0) || (optInAcceleration > 3.000000e+37) )
+  110 /* Generated */       return -1;
+  111 /* Generated */
+  112 /* Generated */    if( optInMaximum == TA_REAL_DEFAULT )
+  113 /* Generated */       optInMaximum = 2.000000e-1;
+  114 /* Generated */    else if( (optInMaximum < 0.000000e+0) ||/* Generated */  (optInMaximum > 3.000000e+37) )
+  115 /* Generated */       return -1;
+  116 /* Generated */
+  117 /* Generated */ #endif /* TA_FUNC_NO_RANGE_CHECK */
+  118 /**** END GENCODE SECTION 2 - DO NOT DELETE THIS LINE ****/
+  119 
+  120    /* insert lookback code here. */
+  121    UNUSED_VARIABLE(optInAcceleration);
+  122    UNUSED_VARIABLE(optInMaximum);
+  123 
+  124    /* SAR always sacrify one price bar to establish the
+  125     * initial extreme price.
+  126     */
+  127    return 1;
+  128 }
+  129 
+  130 /**** START GENCODE SECTION 3 - DO NOT DELETE THIS LINE ****/
+/*
+* TA_SAR - Parabolic SAR
+*
+* Input  = High, Low
+* Output = double
+*
+* Optional Parameters
+* -------------------
+* optInAcceleration:(From 0 to TA_REAL_MAX)
+*    Acceleration Factor used up to the Maximum value
+*
+* optInMaximum:(From 0 to TA_REAL_MAX)
+*    Acceleration Factor Maximum value
+*
+*
+*/
+	public RetCode sar( int    startIdx,
+										int    endIdx,
+										float        inHigh[],
+										float        inLow[],
+										double        optInAcceleration, /* From 0 to TA_REAL_MAX */
+										double        optInMaximum, /* From 0 to TA_REAL_MAX */
+										MInteger     outBegIdx,
+										MInteger     outNBElement,
+										double        outReal[] )
+		{
+		/* insert local variable here */
+		ENUM_DECLARATION(RetCode) retCode;
+
+		int isLong; /* > 0 indicates long. == 0 indicates short */
+		int todayIdx, outIdx;
+
+		VALUE_HANDLE_INT(tempInt);
+
+		double newHigh, newLow, prevHigh, prevLow;
+		double af, ep, sar;
+		ARRAY_LOCAL(ep_temp,1);
+
+		/* Validate the requested output range. */
+		if( startIdx < 0 )
+			return ENUM_VALUE(RetCode,TA_OUT_OF_RANGE_START_INDEX,OutOfRangeStartIndex);
+		if( (endIdx < 0) || (endIdx < startIdx))
+			return ENUM_VALUE(RetCode,TA_OUT_OF_RANGE_END_INDEX,OutOfRangeEndIndex);
+
+		/* Verify required price component. */
+		if(!inHigh||!inLow)
+			return ENUM_VALUE(RetCode,TA_BAD_PARAM,BadParam);
+
+		if( optInAcceleration == TA_REAL_DEFAULT )
+			optInAcceleration = 0.02;
+		else if( (optInAcceleration < 0.0) || (optInAcceleration > 3.000000e+37) )
+			return ENUM_VALUE(RetCode,TA_BAD_PARAM,BadParam);
+
+		/* Insert TA function code here. */
+
+/* Implementation of the SAR has been a little bit open to interpretation
+* since Wilder (the original author) did not define a precise algorithm
+* on how to bootstrap the algorithm. Take any existing software application
+* and you will see slight variation on how the algorithm was adapted.
+*
+* What is the initial trade direction? Long or short?
+* ===================================================
+* The interpretation of what should be the initial SAR values is
+* open to interpretation, particularly since the caller to the function
+  249     * does not specify the initial direction of the trade.
+  250     *
+  251     * In TA-Lib, the following logic is used:
+  252     *  - Calculate +DM and -DM between the first and
+  253     *    second bar. The highest directional indication will
+  254     *    indicate the assumed direction of the trade for the second
+  255     *    price bar.
+  256     *  - In the case of a tie between +DM and -DM,
+  257     *    the direction is LONG by default.
+  258     *
+  259     * What is the initial "extreme point" and thus SAR?
+  260     * =================================================
+  261     * The following shows how different people took different approach:
+  262     *  - Metastock use the first price bar high/low depending of
+  263     *    the direction. No SAR is calculated for the first price
+  264     *    bar.
+  265     *  - Tradestation use the closing price of the second bar. No
+  266     *    SAR are calculated for the first price bar.
+  267     *  - Wilder (the original author) use the SIP from the
+  268     *    previous trade (cannot be implement here since the
+  269     *    direction and length of the previous trade is unknown).
+  270     *  - The Magazine TASC seems to follow Wilder approach which
+  271     *    is not practical here.
+  272     *
+  273     * TA-Lib "consume" the first price bar and use its high/low as the
+  274     * initial SAR of the second price bar. I found that approach to be
+  275     * the closest to Wilders idea of having the first entry day use
+  276     * the previous extreme point, except that here the extreme point is
+  277     * derived solely from the first price bar. I found the same approach
+  278     * to be used by Metastock.
+*/
+
+  281    /* Identify the minimum number of price bar needed
+  282     * to calculate at least one output.
+  283     *
+  284     * Move up the start index if there is not
+  285     * enough initial data.
+  286     */
+  287    if( startIdx < 1 )
+  288       startIdx = 1;
+  289 
+  290    /* Make sure there is still something to evaluate. */
+  291    if( startIdx > endIdx )
+  292    {
+  293       VALUE_HANDLE_DEREF_TO_ZERO(outBegIdx);
+  294       VALUE_HANDLE_DEREF_TO_ZERO(outNBElement);
+  295       return ENUM_VALUE(RetCode,TA_SUCCESS,Success);
+  296    }
+  297 
+  298    /* Make sure the acceleration and maximum are coherent.
+  299     * If not, correct the acceleration.
+  300     */
+  301    af = optInAcceleration;
+  302    if( af > optInMaximum )
+  303       af = optInAcceleration = optInMaximum;
+  304 
+  305    /* Identify if the initial direction is long or short.
+  306     * (ep is just used as a temp buffer here, the name
+  307     *  of the parameter is not significant).
+  308     */
+  309    retCode = FUNCTION_CALL(MINUS_DM)( startIdx, startIdx, inHigh, inLow, 1,
+  310                                       VALUE_HANDLE_OUT(tempInt), VALUE_HANDLE_OUT(tempInt),
+  311 								      ep_temp );
+  312    if( ep_temp[0] > 0 )
+  313       isLong = 0;
+  314    else
+  315       isLong = 1;
+  316 
+  317    if( retCode != ENUM_VALUE(RetCode,TA_SUCCESS,Success) )
+  318    {
+  319       VALUE_HANDLE_DEREF_TO_ZERO(outBegIdx);
+  320       VALUE_HANDLE_DEREF_TO_ZERO(outNBElement);
+  321       return retCode;
+  322    }
+  323 
+  324    VALUE_HANDLE_DEREF(outBegIdx) = startIdx;
+  325    outIdx = 0;
+  326 
+  327    /* Write the first SAR. */
+  328    todayIdx = startIdx;
+  329 
+  330    newHigh = inHigh[todayIdx-1];
+  331    newLow  = inLow[todayIdx-1];
+  332 
+  333    SAR_ROUNDING(newHigh);
+  334    SAR_ROUNDING(newLow);
+  335 
+  336    if( isLong == 1 )
+  337    {
+  338       ep  = inHigh[todayIdx];
+  339       sar = newLow;
+  340    }
+  341    else
+  342    {
+  343       ep  = inLow[todayIdx];
+  344       sar = newHigh;
+  345    }
+  346 
+  347    SAR_ROUNDING(sar);
+  348 
+  349    /* Cheat on the newLow and newHigh for the
+  350     * first iteration.
+  351     */
+  352    newLow  = inLow[todayIdx];
+  353    newHigh = inHigh[todayIdx];
+  354 
+  355    while( todayIdx <= endIdx )
+  356    {
+  357       prevLow  = newLow;
+  358       prevHigh = newHigh;
+  359       newLow  = inLow[todayIdx];
+  360       newHigh = inHigh[todayIdx];
+  361       todayIdx++;
+  362 
+  363       SAR_ROUNDING(newLow);
+  364       SAR_ROUNDING(newHigh);
+  365 
+  366       if( isLong == 1 )
+  367       {
+  368          /* Switch to short if the low penetrates the SAR value. */
+  369          if( newLow <= sar )
+  370          {
+  371             /* Switch and Overide the SAR with the ep */
+  372             isLong = 0;
+  373             sar = ep;
+  374 
+            /* Make sure the overide SAR is within
+             * yesterday's and today's range.
+             */
+            if( sar < prevHigh )
+               sar = prevHigh;
+            if( sar < newHigh )
+               sar = newHigh;
+
+            /* Output the overide SAR  */
+           outReal[outIdx++] = sar;
+
+            /* Adjust af and ep */
+           af = optInAcceleration;
+           ep = newLow;
+
+            /* Calculate the new SAR */
+           sar = sar + af * (ep - sar);
+           SAR_ROUNDING( sar );
+
+            /* Make sure the new SAR is within
+            * yesterday's and today's range.
+            */
+           if( sar < prevHigh )
+               sar = prevHigh;
+            if( sar < newHigh )
+               sar = newHigh;
+         }
+         else
+         {
+            /* No switch */
+
+            /* Output the SAR (was calculated in the previous iteration) */
+           outReal[outIdx++] = sar;
+
+           /* Adjust af and ep. */
+           if( newHigh > ep )
+           {
+              ep = newHigh;
+              af += optInAcceleration;
+              if( af > optInMaximum )
+                  af = optInMaximum;
+            }
+
+            /* Calculate the new SAR */
+            sar = sar + af * (ep - sar);
+           SAR_ROUNDING( sar );
+
+            /* Make sure the new SAR is within
+             * yesterday's and today's range.
+            */
+            if( sar > prevLow )
+               sar = prevLow;
+            if( sar > newLow )
+               sar = newLow;
+         }
+      }
+      else
+      {
+         /* Switch to long if the high penetrates the SAR value. */
+         if( newHigh >= sar )
+         {
+            /* Switch and Overide the SAR with the ep */
+            isLong = 1;
+            sar = ep;
+
+            /* Make sure the overide SAR is within
+             * yesterday's and today's range.
+             */
+            if( sar > prevLow )
+              sar = prevLow;
+            if( sar > newLow )
+               sar = newLow;
+
+            /* Output the overide SAR  */
+            outReal[outIdx++] = sar;
+
+            /* Adjust af and ep */
+            af = optInAcceleration;
+            ep = newHigh;
+
+            /* Calculate the new SAR */
+            sar = sar + af * (ep - sar);
+            SAR_ROUNDING( sar );
+
+            /* Make sure the new SAR is within
+             * yesterday's and today's range.
+             */
+            if( sar > prevLow )
+               sar = prevLow;
+            if( sar > newLow )
+              sar = newLow;
+         }
+         else
+         {
+            /* No switch */
+
+            /* Output the SAR (was calculated in the previous iteration) */
+            outReal[outIdx++] = sar;
+
+            /* Adjust af and ep. */
+            if( newLow < ep )
+            {
+               ep = newLow;
+               af += optInAcceleration;
+               if( af > optInMaximum )
+                  af = optInMaximum;
+           }
+            /* Calculate the new SAR */
+            sar = sar + af * (ep - sar);
+            SAR_ROUNDING( sar );
+
+            /* Make sure the new SAR is within
+             * yesterday's and today's range.
+             */
+            if( sar < prevHigh )
+               sar = prevHigh;
+            if( sar < newHigh )
+               sar = newHigh;
+         }
+      }
+   }
+
+   VALUE_HANDLE_DEREF(outNBElement) = outIdx;
+  return ENUM_VALUE(RetCode,TA_SUCCESS,Success);
+}
